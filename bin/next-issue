@@ -1,0 +1,33 @@
+#!/bin/bash
+# usage: next-issue [--claim] [issues-dir]   print the next free NNN (default dir: <repo root>/<work folder>/issues)
+# A new issue takes the highest number in the dir, in its done/ folder and in the last claim + 1. --claim records the number, so no later call gives it again.
+set -euo pipefail
+claim=0
+[[ ${1:-} == --claim ]] && { claim=1; shift; }
+if [[ -n ${1:-} ]]; then
+  dir=$1
+else
+  root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  dir=$root/$(cd "$root" && bash "$(dirname "$(readlink -f "$0")")/work-folder")/issues
+fi
+[[ -d $dir ]] || { echo "next-issue: no folder $dir" >&2; exit 1; }
+# why: parallel sessions read the folder before either one writes its file, so keep the last given number under a lock
+state=${NEXT_ISSUE_STATE:-$HOME/.claude/state/next-issue}
+mkdir -p "$state"
+key=$(readlink -f "$dir" | tr / _)
+exec 9>"$state/$key.lock"
+flock 9
+max=0
+# why: only a regular file is an issue, so a number in a folder or a broken link does not count
+for i in "$dir"/[0-9]*-*.md "$dir"/done/[0-9]*-*.md; do
+  [[ -f $i ]] || continue
+  n=$(basename "$i"); n=${n%%-*}
+  [[ $n =~ ^[0-9]+$ ]] || continue
+  n=$((10#$n))
+  (( n > max )) && max=$n
+done
+last=$(cat "$state/$key" 2>/dev/null || echo 0)
+(( 10#$last > max )) && max=$((10#$last))
+n=$(printf '%03d' $((max + 1)))
+(( claim )) && echo "$n" >"$state/$key"
+echo "$n"

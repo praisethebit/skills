@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# usage: close-issue [--wontfix] NNN   close one issue of the current repo as resolved, or as wontfix (no commit)
+set -euo pipefail
+
+status=resolved
+if [[ ${1:-} == --wontfix ]]; then status=wontfix; shift; fi
+[[ $# -eq 1 && $1 =~ ^[0-9]+$ ]] || { echo "usage: close-issue [--wontfix] NNN" >&2; exit 2; }
+# why: the work folder is relative to the repo root, so a run from a subdirectory must work
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+wf=$(cd "$root" && bash "$(dirname "$(readlink -f "$0")")/work-folder")
+issues=$wf/issues
+[[ -d $root/$issues ]] || { echo "close-issue: no $issues in $root" >&2; exit 1; }
+cd "$root/$issues"
+mkdir -p done
+
+num=$(printf '%03d' "$((10#$1))")
+files=("$num"-*.md)
+if [[ ! -e ${files[0]} ]]; then
+  echo "no open issue $num in $issues/" >&2
+  exit 1
+fi
+if ((${#files[@]} > 1)); then
+  echo "more than one file for issue $num: ${files[*]}" >&2
+  exit 1
+fi
+f=${files[0]}
+if [[ -e done/$f ]]; then
+  echo "done/$f exists: close-issue stops and changes nothing" >&2
+  exit 1
+fi
+
+grep -q '^## Answer$' "$f" || { echo "$f has no '## Answer' section: write it first" >&2; exit 1; }
+
+today=$(date +%FT%T)
+# why: two formats exist, frontmatter ('status:') or a 'Status:' line under the title
+if [[ $(head -n 1 "$f") == --- ]]; then
+  sed -n '2,/^---$/p' "$f" | grep -q '^status:' || { echo "$f has no 'status:' line in the frontmatter" >&2; exit 1; }
+  sed -i "2,/^---\$/s/^status:.*/status: $status/" "$f"
+  # why: the issue viewer reads stage and closed from the frontmatter
+  sed -i '2,/^---$/{/^stage:/d;/^closed:/d}' "$f"
+  sed -i "2,/^---\$/s/^---\$/stage: done\nclosed: $today\n---/" "$f"
+else
+  grep -q '^Status:' "$f" || { echo "$f has no 'Status:' line" >&2; exit 1; }
+  sed -i "0,/^Status:.*/s//Status: $status/" "$f"
+fi
+sed -i '1,/^## Answer$/s/^\([-*] \)\[ \]/\1[x]/' "$f"
+# why: the file moves one folder deeper, so a link to a repo file needs one more '../'
+sed -i 's#\](\.\./\.\./\([^.]\)#](../../../\1#g' "$f"
+# why: with a work folder symlink git runs in the shared issue repo, and a staged rename there would go into the commit of a different session
+# why: ship takes the old path with the new one
+tracked=
+[[ -L $root/$wf ]] || tracked=$(git ls-files -- "$f" 2>/dev/null || true)
+if [[ -n $tracked ]]; then
+  git mv "$f" "done/$f"
+else
+  mv "$f" "done/$f"
+fi
+
+edited=()
+for o in [0-9]*.md; do
+  [[ -e $o ]] || continue
+  [[ $(head -n 1 "$o") == --- ]] || continue
+  awk -v n="$((10#$1))" '
+    BEGIN { fm = 0 }
+    fm == 2 { print; next }
+    /^---$/ { fm++; print; next }
+    fm == 1 && /^blocked_by:/ {
+      v = $0; sub(/^blocked_by:[ \t]*/, "", v)
+      gsub(/^["\047]|["\047][ \t]*$/, "", v)
+      m = split(v, a, ",")
+      out = ""
+      for (i = 1; i <= m; i++) {
+        t = a[i]; gsub(/^[ \t]+|[ \t]+$/, "", t)
+        u = t; sub(/^#/, "", u)
+        if (u ~ /^[0-9]+$/ && u + 0 == n) continue
+        if (t == "") continue
+        out = (out == "" ? t : out ", " t)
+      }
+      # why: quote a value that plain YAML would misread: a number, a bool or null, a leading non-letter, a hash after a space, colon-space or a trailing colon
+      if (out != "") {
+        q = (out ~ /^[0-9.]+$/ || tolower(out) ~ /^(true|false|null|yes|no|on|off)$/ || out ~ /^[^A-Za-z0-9]/ || out ~ / #/ || out ~ /: |:$/)
+        esc = out; gsub(/\\/, "\\\\", esc); gsub(/"/, "\\\"", esc)
+        print "blocked_by: " (q ? "\"" esc "\"" : out)
+      }
+      next
+    }
+    { print }
+  ' "$o" >"$o.tmp"
+  # why: the caller passes each edited file to ship, because ship commits only the passed issue paths
+  if cmp -s "$o" "$o.tmp"; then rm "$o.tmp"; else cat "$o.tmp" >"$o" && rm "$o.tmp" && edited+=("$o"); fi
+done
+echo "closed: $issues/done/$f"
+for o in "${edited[@]}"; do echo "edited: $issues/$o"; done

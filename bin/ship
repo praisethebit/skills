@@ -1,0 +1,268 @@
+#!/bin/bash
+# usage: ship "<message>" -- <path>...           commit the paths, then the passed work folder paths in the issue repo, then push both
+#        ship --issues "<message>" -- <path>...  commit and push only the passed work folder paths in the issue repo
+#        ship --issues "<message>"               commit and push all changes in the issue repo
+#        ship --tag <name>                tag the pushed HEAD
+# The work folder is set by the line "Work folder: `<name>`." in AGENTS.md (see work-folder). Its issue repo is the git repo that a work folder symlink points into.
+# The private script ~/.claude/local/ship.sh (override: SHIP_LOCAL) can add two steps:
+#   ship.sh issues <issue repo root>   before the issue repo commit; prints one extra path to commit on each line
+#   ship.sh after <path>...            after the pushes, in the code repo root, with the committed code paths
+# A ship.sh exit code that is not 0 makes ship exit 1. The commits and the pushes stay.
+set -euo pipefail
+# why: two sessions can run ship at the same time
+# why: all repos can share one issue repo, so one lock for each user covers all repos
+# why: a manual ship takes the lock too
+# why: a fixed path under $HOME, so a shell with XDG_RUNTIME_DIR and one without it use the same lock
+lock=${SHIP_LOCK:-$HOME/.cache/ship.lock}
+mkdir -p "$(dirname "$lock")"
+exec 9>>"$lock"
+if ! flock -n 9; then
+  echo "ship: another ship runs, waiting for the lock $lock" >&2
+  flock -w 900 9 || { echo "ship: no lock after 900 s, nothing committed" >&2; exit 1; }
+fi
+# why: a child process (an ssh master, git gc --auto, a hook daemon) inherits fd 9
+# why: an explicit unlock frees the lock for all holders when ship exits
+trap 'flock -u 9' EXIT
+# why: the hook blocks a direct `git push` of a tag, so only an explicit --tag makes a tag
+if [[ ${1:-} == --tag ]]; then
+  tag=${2:?usage: ship --tag <name>}
+  # why: the app shows the package.json version, so a tag that disagrees shows a false release
+  # why: the tag goes on HEAD, so read the file from HEAD, not from the working tree
+  # why: jq reads only the top-level key, and only a string counts as a version
+  if git cat-file -e HEAD:package.json 2>/dev/null; then
+    command -v jq >/dev/null || { echo "ship: jq is not installed, so ship cannot check package.json" >&2; exit 1; }
+    ver=$(git show HEAD:package.json | jq -r '(.version | select(type == "string")) // empty') || { echo "ship: cannot read package.json in HEAD" >&2; exit 1; }
+    if [[ -n $ver && $tag != "v$ver" ]]; then
+      echo "ship: tag $tag does not match package.json version $ver (expected v$ver)" >&2
+      exit 1
+    fi
+  fi
+  git fetch -q
+  [[ $(git rev-parse HEAD) == $(git rev-parse '@{u}') ]] || { echo "ship: HEAD is not pushed, ship the commits first" >&2; exit 1; }
+  git tag "$tag"
+  git push -q origin "refs/tags/$tag"
+  echo "tagged $tag at $(git log -1 --format='%h %s')"
+  exit 0
+fi
+# why: the work folder and the paths are relative to the repo root, so a run from a subdirectory must not skip the issue repo
+cd "$(git rev-parse --show-toplevel)"
+here=$(dirname "$(readlink -f "$0")")
+wf=$(bash "$here/work-folder")
+local_ship=${SHIP_LOCAL:-$HOME/.claude/local/ship.sh}
+issues_only=0
+if [[ ${1:-} == --issues ]]; then issues_only=1; shift; fi
+msg=${1:?usage: ship "<message>" -- <path>...}; shift
+[[ ${1:-} == -- ]] && shift
+# why: without the line, a symlink to a folder of another git repo is probably a work folder, and its issue files would stay out of every commit
+if ! grep -qE '^Work folder: `[^`]+`\.$' AGENTS.md 2>/dev/null; then
+  while IFS= read -r l; do
+    ltop=$(git -C "$l" rev-parse --show-toplevel 2>/dev/null) || continue
+    [[ $ltop != "$PWD" ]] || continue
+    echo "ship: $l is a symlink into another git repo, and AGENTS.md has no work folder line. Add the line: Work folder: \`${l#./}\`." >&2
+    exit 2
+  done < <(find . -maxdepth 1 -type l -xtype d)
+fi
+# why: with a work folder symlink the issue repo commit holds the issue files, and git stops on a path beyond a symlink
+# why: two sessions can edit issue files at the same time, so the issue repo commit takes only the work folder paths of this call
+scratch=()
+sweep=0
+if [[ -L $wf ]] && (( $# )); then
+  keep=()
+  for p in "$@"; do
+    if [[ $p == "$wf" || $p == "$wf"/* || $p == "./$wf" || $p == "./$wf"/* ]]; then scratch+=("$p"); else keep+=("$p"); fi
+  done
+  (( ${#keep[@]} )) || issues_only=1
+  set -- "${keep[@]}"
+fi
+if (( issues_only )); then
+  (( $# == 0 )) || { echo "ship: --issues takes only work folder paths" >&2; exit 2; }
+  # why: the form with no paths is the manual commit of all issue repo edits
+  (( ${#scratch[@]} )) || sweep=1
+else
+  (( $# )) || { echo "ship: no paths" >&2; exit 2; }
+fi
+grep -qi "^Co-Authored-By: " <<<"$msg" && { echo "ship: remove the Co-Authored-By line" >&2; exit 2; }
+
+# stamp_created <dir> <files>: add 'created:' to each new issue file in the list.
+stamp_created() {
+  local d=$1 f today
+  today=$(date +%FT%T)
+  while IFS= read -r f; do
+    [[ $f =~ ^Issues/[^/]+/issues/(done/)?[0-9]+-[^/]*\.md$ ]] || continue
+    [[ $(head -n 1 "$d/$f") == --- ]] || continue
+    grep -q '^created:' <(sed -n '2,/^---$/p' "$d/$f") && continue
+    sed -i "2,/^---\$/s/^---\$/created: $today\n---/" "$d/$f"
+  done <<<"$2"
+}
+
+# push_repo <dir> [merge]: push, and on failure pull one time and push again.
+# why: push.default=upstream lets a worktree branch push to its upstream origin/main
+# why: for a branch with the same name as its upstream, push.default=upstream acts as the default "simple"
+push_repo() {
+  local d=$1 mode=${2:-rebase} push_err
+  if push_err=$(git -C "$d" -c push.default=upstream push -q 2>&1); then return 0; fi
+  printf '%s\n' "$push_err" >&2
+  if [[ $mode == merge ]]; then
+    # why: all sessions share the issue repo checkout, and a stash would take the issue edits of a different session
+    # why: a merge leaves unrelated dirty files alone
+    if ! git -C "$d" pull -q --no-rebase --no-edit; then
+      if git -C "$d" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+        git -C "$d" merge --abort || echo "ship: merge --abort failed, run it by hand" >&2
+      fi
+      echo "ship: pull --no-rebase failed in $d, commit is local only" >&2
+      return 1
+    fi
+  # why: --autostash lets the rebase run when unrelated files have unstaged changes
+  # why: one code checkout has only one session, so the stash holds only its own edits
+  elif ! git -C "$d" pull -q --rebase --autostash; then
+    # why: pull can fail before a rebase starts, and abort then hides the real error
+    if [[ -d $(git -C "$d" rev-parse --git-path rebase-merge) || -d $(git -C "$d" rev-parse --git-path rebase-apply) ]]; then
+      git -C "$d" rebase --abort || echo "ship: rebase --abort failed, run it by hand" >&2
+    fi
+    echo "ship: pull --rebase failed in $d, commit is local only" >&2
+    return 1
+  fi
+  git -C "$d" -c push.default=upstream push -q || { echo "ship: second push failed in $d, commit is local only" >&2; return 1; }
+  # why: pull exits 0 when the autostash re-apply conflicts, and git keeps the stash
+  [[ -z $(git -C "$d" diff --name-only --diff-filter=U) ]] || echo "ship: pushed, but your unstaged changes conflict with the pull in $d. See 'git stash list'" >&2
+}
+
+rc=0
+code_hash=
+if (( ! issues_only )); then
+  # why: a `git rm` or `git rm --cached` that the user staged must stay
+  # why: -z keeps odd file names as they are
+  removed=()
+  while IFS= read -r -d '' r; do removed+=("$r"); done < <(git diff --cached --no-renames --name-only -z --diff-filter=D -- "$@")
+  if (( ${#removed[@]} == 0 )); then
+    # why: a `git mv` or `git rm` leaves the old path out of the index, and then `git add` fails with "did not match"
+    git reset -q -- "$@" 2>/dev/null || true
+    git add -- "$@"
+    # why: after a rebase by hand the commit exists and only the push is left, and the hook blocks a direct `git push`
+    if git diff --cached --quiet -- "$@"; then
+      echo "ship: no change in the passed paths, push only" >&2
+    else
+      git commit -q -F - -- "$@" <<<"$msg"
+    fi
+  else
+    # why: a path commit reads the work tree, so it would add back a removed file that is present again, and `git add` refuses an ignored path
+    # why: a temporary index holds exactly HEAD plus the paths, and the real index stays as it is until the commit works
+    tmpdir=$(mktemp -d)
+    trap 'rm -rf "$tmpdir"; flock -u 9' EXIT
+    export GIT_INDEX_FILE=$tmpdir/index
+    git read-tree HEAD
+    git rm -q --cached --ignore-unmatch -- "${removed[@]}"
+    addp=()
+    for p in "$@"; do
+      skip=0
+      for r in "${removed[@]}"; do [[ $p == "$r" ]] && skip=1; done
+      (( skip )) || addp+=("$p")
+    done
+    (( ${#addp[@]} == 0 )) || git add -- "${addp[@]}"
+    git commit -q -F - <<<"$msg"
+    unset GIT_INDEX_FILE
+    rm -rf "$tmpdir"
+    git reset -q -- "$@" 2>/dev/null || true
+  fi
+fi
+
+# why: only a repo whose work folder is a symlink has moved its issues to the issue repo
+proj=
+if [[ -L $wf ]]; then
+  proj=$(git -C "$(readlink -f "$wf")" rev-parse --show-toplevel 2>/dev/null) || proj=
+fi
+if (( issues_only )) && [[ -z $proj ]]; then
+  echo "ship: --issues needs a work folder symlink into the issue repo" >&2
+  exit 2
+fi
+
+if (( ! issues_only )); then
+  # why: a worktree branch from `claude -w` can have no upstream, so it pushes to the default branch of origin
+  if [[ $(git rev-parse --absolute-git-dir) != $(git rev-parse --path-format=absolute --git-common-dir) ]] && ! git rev-parse -q --verify '@{u}' >/dev/null 2>&1; then
+    # why: the code commit exists now, so an offline fetch must not stop the issue repo commit
+    git fetch -q origin || echo "ship: git fetch failed, the upstream can be wrong" >&2
+    # why: a clone of an empty repo has no origin/HEAD, so ask the remote for its default branch
+    git symbolic-ref -q refs/remotes/origin/HEAD >/dev/null || git remote set-head origin --auto >/dev/null 2>&1 || true
+    def=$(git symbolic-ref -q --short refs/remotes/origin/HEAD) || def=origin/main
+    git branch -q --set-upstream-to="$def" || echo "ship: cannot set the upstream $def" >&2
+  fi
+  code_pushed=1
+  push_repo . || { echo "ship: FAILED push of the code repo" >&2; rc=1; code_pushed=0; }
+  git log -1 --format='%h %s'
+  left=$(git status --short --untracked-files=no)
+  [[ -z $left ]] || printf 'not staged:\n%s\n' "$left"
+  # why: a pull --rebase in the push can change the hash, so read it after the push
+  code_hash=$(git rev-parse --short HEAD)
+fi
+
+proj_status=
+if [[ -n $proj ]]; then
+  # why: in a git worktree the top level is .claude/worktrees/agent-x, and the common git dir is the .git folder of the main checkout
+  repo_name=$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")
+  # why: an error in the local step must not stop the ship, so the commits and the pushes still run and the exit code is 1
+  extra=
+  if [[ -f $local_ship ]]; then
+    extra=$(cd "$proj" && bash "$local_ship" issues "$proj") || { echo "ship: $local_ship issues failed" >&2; rc=1; }
+  fi
+  pmsg=$(printf '%s\n\nRepo: %s' "$msg" "$repo_name")
+  [[ -z $code_hash ]] || pmsg+=$(printf '\nCommit: %s' "$code_hash")
+  if (( sweep )); then
+    # why: an untracked file is a new issue, and this one step covers each skill and hand edit that makes one
+    new_files=$(git -C "$proj" ls-files --others --exclude-standard)
+    stamp_created "$proj" "$new_files"$'\n'"$extra"
+    git -C "$proj" add -A
+    if ! git -C "$proj" diff --cached --quiet; then
+      git -C "$proj" commit -q -F - <<<"$pmsg"
+      proj_status=committed
+    fi
+  else
+    base=$(realpath --relative-to="$proj" "$(readlink -f "$wf")")
+    cand=()
+    for p in "${scratch[@]}"; do
+      r=${p#./}; r=${r#"$wf"}; r=${r#/}
+      r=$base${r:+/$r}
+      cand+=("$r")
+      # why: a mistyped or stale path commits nothing, so name it
+      [[ -e $proj/$r ]] || git -C "$proj" cat-file -e "HEAD:$r" 2>/dev/null || echo "ship: warning: $p matches no file" >&2
+      # why: close-issue moves the file to done/ with mv, so the old path is a removal that the caller may not pass
+      if [[ $r =~ ^(.*/issues)/done/([^/]+)$ ]]; then cand+=("${BASH_REMATCH[1]}/${BASH_REMATCH[2]}")
+      elif [[ $r =~ ^(.*/issues)/([^/]+)$ ]]; then cand+=("${BASH_REMATCH[1]}/done/${BASH_REMATCH[2]}"); fi
+    done
+    # why: a path that the local step prints belongs to no session, so each ship commits it
+    while IFS= read -r r; do [[ -n $r ]] && cand+=("$r"); done <<<"$extra"
+    # why: a file outside Issues/ belongs to no session, so each ship commits it
+    while IFS= read -r r; do [[ -n $r ]] && cand+=("$r"); done < <(git -C "$proj" ls-files --modified --deleted --others --exclude-standard -- . ':(exclude)Issues')
+    # why: git stops on a pathspec that matches no file in the work tree, the index or HEAD
+    ppaths=()
+    for r in "${cand[@]}"; do
+      if [[ -e $proj/$r ]] || git -C "$proj" ls-files --error-unmatch -- "$r" >/dev/null 2>&1 || git -C "$proj" cat-file -e "HEAD:$r" 2>/dev/null; then ppaths+=("$r"); fi
+    done
+    if (( ${#ppaths[@]} )); then
+      untracked=$(git -C "$proj" ls-files --others --exclude-standard -- "${ppaths[@]}")
+      stamp_created "$proj" "$untracked"
+      git -C "$proj" add -A -- "${ppaths[@]}"
+      if ! git -C "$proj" diff --cached --quiet HEAD -- "${ppaths[@]}"; then
+        # why: a path commit leaves the index entries of a different session as they are
+        git -C "$proj" commit -q -F - -- "${ppaths[@]}" <<<"$pmsg"
+        proj_status=committed
+      fi
+    fi
+  fi
+fi
+
+if [[ -n $proj ]]; then
+  # why: HEAD can be the commit of a different session (a pull, or a ship that committed these paths first), so name only the commit of this call
+  proj_commit=
+  [[ $proj_status == committed ]] && proj_commit=$(git -C "$proj" log -1 --format='%h %s')
+  if push_repo "$proj" merge; then
+    if [[ -n $proj_commit ]]; then echo "Issues: $proj_commit"; else echo "Issues: no commit in this call"; fi
+  else
+    echo "ship: FAILED push of the issue repo" >&2; rc=1
+  fi
+fi
+
+# why: a commit that is not on the remote must not reach the live tools
+if (( ! issues_only )) && (( code_pushed )) && [[ -f $local_ship ]]; then
+  bash "$local_ship" after "$@" || { echo "ship: $local_ship after failed" >&2; rc=1; }
+fi
+exit "$rc"

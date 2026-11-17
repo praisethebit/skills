@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# usage: work-folder   print the work folder name of the repo of the current folder
+# The name is the value of the first line "Work folder: `<name>`." in AGENTS.md at the repo root. With no line, it is "planning".
+# A bad value (absolute, empty or with a ".." part) stops with exit code 1.
+set -euo pipefail
+root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+value=
+if [[ -f $root/AGENTS.md ]]; then
+  line=$(grep -m1 -E '^Work folder: `[^`]+`\.$' "$root/AGENTS.md" || true)
+  if [[ -n $line ]]; then
+    value=${line#*\`}
+    value=${value%\`.}
+  fi
+fi
+if [[ -z $value ]]; then echo planning; exit 0; fi
+clean=${value%/}
+clean=${clean#./}
+if [[ -z $clean || $clean == /* || /$clean/ == *"/../"* ]]; then
+  echo "work-folder: bad work folder \`$value\` in $root/AGENTS.md" >&2
+  exit 1
+fi
+echo "$clean"
