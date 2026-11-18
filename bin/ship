@@ -101,6 +101,10 @@ stamp_created() {
 push_repo() {
   local d=$1 mode=${2:-rebase} push_err
   if push_err=$(git -C "$d" -c push.default=upstream push -q 2>&1); then return 0; fi
+  # why: the code repo is "." and a worktree folder has the issue number as its name, so the messages name the repo from its origin URL
+  local name
+  name=$(basename "$(git -C "$d" remote get-url origin 2>/dev/null)" .git)
+  [[ -n $name ]] || name=$d
   # why: the first push error shows only when the retry fails, because an agent reads a shown "[rejected]" as a failed ship
   if [[ $mode == merge ]]; then
     # why: all sessions share the issue repo checkout, and a stash would take the issue edits of a different session
@@ -110,7 +114,7 @@ push_repo() {
         git -C "$d" merge --abort || echo "ship: merge --abort failed, run it by hand" >&2
       fi
       printf '%s\n' "$push_err" >&2
-      echo "ship: pull --no-rebase failed in $d, commit is local only" >&2
+      echo "ship: pull --no-rebase failed in $name, commit is local only" >&2
       return 1
     fi
   # why: --autostash lets the rebase run when unrelated files have unstaged changes
@@ -121,13 +125,13 @@ push_repo() {
       git -C "$d" rebase --abort || echo "ship: rebase --abort failed, run it by hand" >&2
     fi
     printf '%s\n' "$push_err" >&2
-    echo "ship: pull --rebase failed in $d, commit is local only" >&2
+    echo "ship: pull --rebase failed in $name, commit is local only" >&2
     return 1
   fi
-  git -C "$d" -c push.default=upstream push -q || { printf '%s\n' "$push_err" >&2; echo "ship: second push failed in $d, commit is local only" >&2; return 1; }
-  echo "ship: the remote was ahead, so ship pulled and pushed again in $d. The push worked." >&2
+  git -C "$d" -c push.default=upstream push -q || { printf '%s\n' "$push_err" >&2; echo "ship: second push failed in $name, commit is local only" >&2; return 1; }
+  echo "ship: the remote was ahead, so ship pulled and pushed again in $name. The push worked." >&2
   # why: pull exits 0 when the autostash re-apply conflicts, and git keeps the stash
-  [[ -z $(git -C "$d" diff --name-only --diff-filter=U) ]] || echo "ship: pushed, but your unstaged changes conflict with the pull in $d. See 'git stash list'" >&2
+  [[ -z $(git -C "$d" diff --name-only --diff-filter=U) ]] || echo "ship: pushed, but your unstaged changes conflict with the pull in $name. See 'git stash list'" >&2
 }
 
 rc=0
