@@ -101,7 +101,7 @@ stamp_created() {
 push_repo() {
   local d=$1 mode=${2:-rebase} push_err
   if push_err=$(git -C "$d" -c push.default=upstream push -q 2>&1); then return 0; fi
-  printf '%s\n' "$push_err" >&2
+  # why: the first push error shows only when the retry fails, because an agent reads a shown "[rejected]" as a failed ship
   if [[ $mode == merge ]]; then
     # why: all sessions share the issue repo checkout, and a stash would take the issue edits of a different session
     # why: a merge leaves unrelated dirty files alone
@@ -109,6 +109,7 @@ push_repo() {
       if git -C "$d" rev-parse -q --verify MERGE_HEAD >/dev/null; then
         git -C "$d" merge --abort || echo "ship: merge --abort failed, run it by hand" >&2
       fi
+      printf '%s\n' "$push_err" >&2
       echo "ship: pull --no-rebase failed in $d, commit is local only" >&2
       return 1
     fi
@@ -119,10 +120,12 @@ push_repo() {
     if [[ -d $(git -C "$d" rev-parse --git-path rebase-merge) || -d $(git -C "$d" rev-parse --git-path rebase-apply) ]]; then
       git -C "$d" rebase --abort || echo "ship: rebase --abort failed, run it by hand" >&2
     fi
+    printf '%s\n' "$push_err" >&2
     echo "ship: pull --rebase failed in $d, commit is local only" >&2
     return 1
   fi
-  git -C "$d" -c push.default=upstream push -q || { echo "ship: second push failed in $d, commit is local only" >&2; return 1; }
+  git -C "$d" -c push.default=upstream push -q || { printf '%s\n' "$push_err" >&2; echo "ship: second push failed in $d, commit is local only" >&2; return 1; }
+  echo "ship: the remote was ahead, so ship pulled and pushed again in $d. The push worked." >&2
   # why: pull exits 0 when the autostash re-apply conflicts, and git keeps the stash
   [[ -z $(git -C "$d" diff --name-only --diff-filter=U) ]] || echo "ship: pushed, but your unstaged changes conflict with the pull in $d. See 'git stash list'" >&2
 }
