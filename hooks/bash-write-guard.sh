@@ -30,14 +30,14 @@ fi
 # why: a redirect or a tee to a file with a source or doc suffix is a repo write, unless the path is a temp path.
 sfx='md|sh|json|jsonc|py|ts|tsx|js|go|kt|kts|yml|yaml|toml|txt|base|ps1|conf'
 # why: a session sets S=<scratchpad> and writes to $S/x, so a variable set to a temp path is a temp path.
-tmpvars=$(grep -oE '(^|[;&|[:space:]])[A-Za-z_][A-Za-z_0-9]*=["'"'"']?(/tmp/|\$TMPDIR|\$\{TMPDIR)' <<<"$cmd" | sed -E 's/^[;&|[:space:]]*//; s/=.*//')
+tmpvars=$(grep -oE '(^|[;&|[:space:]])[A-Za-z_][A-Za-z_0-9]*=["'"'"']?(/tmp/|\$TMPDIR|\$\{TMPDIR|\$\(mktemp|/mnt/[a-z]/Users/[^/]+/AppData/Local/Temp/)' <<<"$cmd" | sed -E 's/^[;&|[:space:]]*//; s/=.*//')
 # why: a relative write after `cd <temp dir>` is a temp write only when that cd is the one cd of the command.
 cds=$(grep -oE '(^|[;&|(])[[:space:]]*cd[[:space:]]+[^;&|[:space:]]+' <<<"$txt" | sed -E 's/^.*cd[[:space:]]+//; s/["'"'"']//g')
 tmpcwd=0
 [[ -n $cds && $(grep -c . <<<"$cds") -eq 1 && $cds =~ ^(/tmp/|\$TMPDIR|\$\{TMPDIR) ]] && tmpcwd=1
 while IFS= read -r t; do
   t=${t//[\"\']/}
-  [[ $t == /tmp/* || $t == /dev/* || $t == '$TMPDIR'* || $t == '${TMPDIR'* ]] && continue
+  [[ $t == /tmp/* || $t == /dev/* || $t == '$TMPDIR'* || $t == '${TMPDIR'* || $t =~ ^/mnt/[a-z]/Users/[^/]+/AppData/Local/Temp/ ]] && continue
   for v in $tmpvars; do [[ $t == "\$$v/"* || $t == "\${$v}/"* ]] && continue 2; done
   [[ $tmpcwd == 1 && $t != /* && $t != '~'* && $t != '$'* ]] && continue
   [[ $t =~ \.($sfx)$ ]] && deny 'a shell redirect or `tee`'
