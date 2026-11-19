@@ -65,7 +65,8 @@ Issues and specs live as markdown files in the work folder.
   | `done` | Closed | None |
 
 - Who changes `stage`:
-  - `add-issue` writes the first stage of an issue, by the stage rule in step 3 of the skill: `next` for an issue with no open question that fits one ticket, `spec` for an issue with no open question that is too big for one ticket, and `backlog` for each other issue. "add idea: X" writes `idea`.
+  - `add-issue` writes the first stage of an issue, by the stage rule in step 4 of the skill: `next` for an issue with no open question that fits one ticket, `spec` for an issue with no open question that is too big for one ticket, and `backlog` for each other issue. "add idea: X" writes `idea`.
+  - `add-issue` moves an open issue to `backlog` when an added finding breaks its ticket size (more than 6 criteria, or a file that the issue does not name).
   - The end of `/grill-with-docs` writes `next` or `spec`, after the user confirms the shared understanding.
   - `/to-tickets` writes `next` on each ticket, and closes the source issue with an `## Answer` that lists the new tickets.
   - `close-issue` writes `done`.
