@@ -80,7 +80,7 @@ Do this before `ship`. Give the reader the absolute path of the ticket file. Rea
 1. Start one reader for each ticket in one message.
 2. Show the user each paraphrase.
 3. Sort each guess point: wording (fix the ticket), minor (decide, and write the decision in the ticket), or the user's. Ask all of the user's points in one `AskUserQuestion` round.
-4. After the fixes, check each ticket again: `model` and `effort` match the mapping (the proofs and each other `opus` reason), it has a maximum of 6 criteria, and each picked failure mode is still a criterion with a proof in exactly one ticket.
+4. After the fixes, check each ticket again: `model` and `effort` match the mapping (the proofs and each other `opus` reason), it has a maximum of 6 criteria, it has a `seam` key that follows the rules of `## Seam` in the tracker doc, and each picked failure mode is still a criterion with a proof in exactly one ticket.
 5. Start no second read. Each ticket gets one cold read.
 
 Done when each ticket has a paraphrase (or a failed reader has an accepted gap, listed in the `## Answer` or the final message), and each guess point is fixed, decided or answered.
@@ -102,6 +102,7 @@ model: <opus|sonnet>
 effort: <low|medium|high>
 blocked_by: 018, 019
 behavior_spec: <docs/spec/file.md, or none; only where the rule is on>
+seam: <repo-relative paths, or none>
 stage: next
 feature: <feature name>
 ---
@@ -121,8 +122,8 @@ The end-to-end behaviour this ticket makes work, from the user's perspective, no
 - The adjacent work that the ticket does not ask for, or "None."
 ```
 
-In a repo where the `AGENTS.md` has the line ``Behavior spec: `docs/spec/`.``, write `behavior_spec: <files in docs/spec/>` (or `none` for a ticket with no behavior change), and write each criterion that states what the product does as a behavior criterion. Read `## Behavior spec` in the tracker doc for the form. Write `stage: next` in every ticket. Write the proof type of each criterion from the list in `~/.claude/issue-tracker.md`. Write `model` and `effort` by the mapping in the same doc. In `## Out of scope`, list each adjacent change that the implementer could do by mistake. Write `feature` when the run makes 2 or more tickets. Omit `blocked_by` when the ticket has no blocker. Write a value with quotes only where YAML needs them (for example `blocked_by: "019"`).
+In a repo where the `AGENTS.md` has the line ``Behavior spec: `docs/spec/`.``, write `behavior_spec: <files in docs/spec/>` (or `none` for a ticket with no behavior change), and write each criterion that states what the product does as a behavior criterion. Read `## Behavior spec` in the tracker doc for the form. Write `seam` in every ticket by the rules in `## Seam` of the tracker doc. Write `stage: next` in every ticket. Write the proof type of each criterion from the list in `~/.claude/issue-tracker.md`. Write `model` and `effort` by the mapping in the same doc. In `## Out of scope`, list each adjacent change that the implementer could do by mistake. Write `feature` when the run makes 2 or more tickets. Omit `blocked_by` when the ticket has no blocker. Write a value with quotes only where YAML needs them (for example `blocked_by: "019"`).
 
 </local-ticket-template>
 
-Avoid specific file paths or code snippets: they go stale fast. Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it and note briefly that it came from a prototype. Trim to the decision-rich parts, not a working demo, just the important bits.
+Avoid specific file paths or code snippets: they go stale fast. Exception 1: the `seam` key holds paths. Exception 2: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it and note briefly that it came from a prototype. Trim to the decision-rich parts, not a working demo, just the important bits.

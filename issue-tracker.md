@@ -15,7 +15,7 @@ Issues and specs live as markdown files in the work folder.
 - `NNN` is a zero-padded number for this repo. A new issue takes the highest number across both folders + 1. Numbers are never reused. Refer to an issue as `#007`. Refer to an issue in another repo as `other-repo#160`.
 - A file uses YAML frontmatter at the top of the file. Then comes `# <title>`.
 - Write a frontmatter value with quotes only where YAML needs them: `status: open`, `blocked_by: 018, 019`, `was: other-repo#123`, but `blocked_by: "019"`. Then a change of one value changes one line.
-- Keys (frontmatter keys are lowercase, and a space becomes `_`): `project` and `status` (`open`, `resolved` or `wontfix`) always. Optional: `category` (`bug|enhancement`), `model` (`opus|sonnet`), `effort` (`low|medium|high`), `blocked_by` (`018, 019`; quote a lone number, such as `"026"`, because YAML reads `026` as the number 26), `stage` (the planning stage: `idea`, `backlog`, `spec`, `next` or `done`), `feature` (the name of the feature; set it only when 2 or more open issues share it), `created` (`YYYY-MM-DDTHH:MM:SS` in local time, set by `ship` on the first commit of the file; do not write it by hand), `closed` (`YYYY-MM-DDTHH:MM:SS` in local time, set by `close-issue`), `spec` (`<work folder>/specs/<slug>.md`), `behavior_spec` (one or more files in `docs/spec/`, for example `docs/spec/sync.md` or `docs/spec/sync.md, docs/spec/login.md` (a comma list, like `blocked_by`), or `none`; see `## Behavior spec`), `was` (`other-repo#NNN`, the old number of a moved issue), `host` (the one host that the work changes, for example `host: docker01`; only a repo that has hosts uses it). An old file keeps `YYYY-MM-DD` in `created` or `closed`. Every reader must accept both forms.
+- Keys (frontmatter keys are lowercase, and a space becomes `_`): `project` and `status` (`open`, `resolved` or `wontfix`) always. Optional: `category` (`bug|enhancement`), `model` (`opus|sonnet`), `effort` (`low|medium|high`), `blocked_by` (`018, 019`; quote a lone number, such as `"026"`, because YAML reads `026` as the number 26), `stage` (the planning stage: `idea`, `backlog`, `spec`, `next` or `done`), `feature` (the name of the feature; set it only when 2 or more open issues share it), `created` (`YYYY-MM-DDTHH:MM:SS` in local time, set by `ship` on the first commit of the file; do not write it by hand), `closed` (`YYYY-MM-DDTHH:MM:SS` in local time, set by `close-issue`), `spec` (`<work folder>/specs/<slug>.md`), `behavior_spec` (one or more files in `docs/spec/`, for example `docs/spec/sync.md` or `docs/spec/sync.md, docs/spec/login.md` (a comma list, like `blocked_by`), or `none`; see `## Behavior spec`), `seam` (a comma list of repo-relative paths, or `none`; see `## Seam`), `was` (`other-repo#NNN`, the old number of a moved issue), `host` (the one host that the work changes, for example `host: docker01`; only a repo that has hosts uses it). An old file keeps `YYYY-MM-DD` in `created` or `closed`. Every reader must accept both forms.
 - `model` is the recommended model for the session that implements the issue. Set it when you create the issue. `opus`: a study, an idea, a decision, or a root-cause search. Also use `opus` when the cause is not known. Also use `opus` when the proof is an app device proof. `sonnet`: a clear ticket with acceptance criteria, when the ticket has no other `opus` reason. This covers a local proof and each proof that is not local, except an app device proof. A local proof is a unit test, a local script, a browser test on a local build, a lint or hook check, or a read of changed text (a docs-only change).
 
   A proof is not local in each of these cases. Each case gives `sonnet`, except an app device proof, which gives `opus`:
@@ -103,6 +103,19 @@ A ticket that changes what a product does also changes the behavior spec of that
 - **Key `behavior_spec`.** `/to-tickets` and the end step of `/grill-with-docs` write the key in a repo where the rule is on: the files in `docs/spec/`, or `none` for a ticket with no behavior change. `add-issue` writes the key only when it writes a behavior criterion. With no behavior criterion, it writes no key, and a later grill adds it.
 - **Implementer.** Step 2 of `/implement` writes one or 2 entries for each behavior criterion, in the file of its capability among the files that the key names. The `## Answer` names the spec file as the place of each behavior fact.
 - **Old tickets.** A ticket with no `behavior_spec` key, or with `none`, gets no spec edit.
+
+## Seam
+
+The **Seam** of a ticket is the code folders or files that the ticket changes. The key `seam` holds it.
+
+- **Value.** A comma list of repo-relative paths, in the same form as `behavior_spec`. Example: `seam: src/sync/, docs/setup.md`.
+- **Rules.**
+  - A maximum of 5 paths. When the ticket changes more files, name the folders that hold them.
+  - A folder path ends with `/`. Use a folder when the ticket changes 2 or more files in it. Otherwise name the file.
+  - Never the repo root.
+  - `none` for a ticket that changes no file of the repo, for example a ticket that changes only a host, or only issue files in the work folder.
+- **Writers.** `add-issue`, `/to-tickets` and the end step of `/grill-with-docs` write the key for each issue that they write at `stage: next`. An idea card, and an issue at `backlog` or `spec`, need no key, and the writers write none there.
+- **Old tickets.** A ticket with no `seam` key stays valid.
 
 Open work: `ls <work folder>/issues`.
 
