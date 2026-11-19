@@ -183,7 +183,9 @@ Done when each item in the report is in the log.
 1. Ask "Which findings become issues?" if the user did not answer yet. Wait for the numbers. With no findings, or when the user answers "none", go to sub-step 5.
 2. Group the picked findings (skip sub-steps 2 to 4 when none are picked) by seam, with a maximum of 6 findings in one issue. Show the groups before you write.
 3. Call `add-issue` one time for each group. Give it the 4 parts of each finding. `add-issue` sets the stage.
-4. Write each `#NNN` in the log.
+4. Write each `#NNN` in the log. Decide it for each group by itself: the `#NNN` of a group is the number of the issue that got the group.
+   - `add-issue` made a new issue (it printed no `edited:` line): use the new number from `--claim`. This includes the user answer "New issue" in the match question.
+   - `add-issue` appended the group to an open issue (it printed `edited: <work folder>/issues/<file name>`): use the digits before the first `-` of the file name, as written. Example: `042-some-title.md` gives `#042`. The number from `--claim` stays unused.
 5. Ship the log as the last step: with `ship --issues` when the work folder is a symlink, with `ship` if not. `ship` commits only the `<work folder>/...` paths that it gets.
 
 Done when the `ship` call of the log has run.
