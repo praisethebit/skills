@@ -26,7 +26,10 @@ tmpvars=$(grep -oE '(^|[;&|[:space:]])[A-Za-z_][A-Za-z_0-9]*=["'"'"']?(/tmp/|\$T
 # why: a relative write after `cd <temp dir>` is a temp write only when that cd is the one cd of the command.
 cds=$(grep -oE '(^|[;&|(])[[:space:]]*cd[[:space:]]+[^;&|[:space:]]+' <<<"$txt" | sed -E 's/^.*cd[[:space:]]+//; s/["'"'"']//g')
 tmpcwd=0
-[[ -n $cds && $(grep -c . <<<"$cds") -eq 1 && $cds =~ ^(/tmp/|\$TMPDIR|\$\{TMPDIR) ]] && tmpcwd=1
+if [[ -n $cds && $(grep -c . <<<"$cds") -eq 1 ]]; then
+  [[ $cds =~ ^(/tmp/|\$TMPDIR|\$\{TMPDIR) ]] && tmpcwd=1
+  for v in $tmpvars; do [[ $cds == "\$$v" || $cds == "\$$v/"* || $cds == "\${$v}"* ]] && tmpcwd=1; done
+fi
 # Return 0 when the write target $1 is a temp path: /tmp, /dev, TMPDIR, Windows Temp, a temp variable, or a relative path after a cd to /tmp.
 is_tmp() {
   local t=${1//[\"\']/} v
