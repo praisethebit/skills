@@ -62,37 +62,8 @@ Each `AskUserQuestion` call of this skill (a blocker, the recommended issues of 
       5. Collect each `edited:` line that `add-issue` prints. Pass these `<work folder>/...` paths, with the new issue files, to the `ship` call of step 5.
 
    8. After the last code change, wait until no device check runs. Then run the full test run that the repo `AGENTS.md` asks for before `ship`. A run with `ONLY=` or a subset does not count. When the repo names none, run the unit tests of step 3.
-   9. A fix for a review finding needs no new review. A code fix for a device-check failure needs one new review. Start it as in step 4.1, with one change to the prompt: in place of "Return the review output verbatim." write `Return verbatim only the findings whose file and line are in this list: <each file and line range of the device-check fixes>. Then write one line with the count of the other findings and the file and line of each. If no finding is in the list, return NO FINDINGS and that line.` The arguments of the Skill call stay `medium <issue file path>`. Before the sort of step 4.5, drop each finding of this review that is not on a line of the list, and count these drops, plus the count that the agent gives for the other findings, in the one line of dropped findings. Sort the other findings as in step 4.5. Start no third review. Each in-scope finding of this review becomes a recommended issue: ask about it as in step 4.7.
-
-      Why: each review of the full change can find new points. A new review after each fix then has no end. The review reads the full change, and a rule in its arguments is not reliable, so the agent and the session apply the limit.
+   9. When you made a code fix for a device-check failure, read `~/.claude/skills/implement/second-review.md` now and follow it.
 
    Done when no in-scope finding of the first review is open, the last device check has no fail (a failure of no criterion with a recommended issue does not count), the last code change has a full test run, and each code fix for a device-check failure has its one review.
 5. **Close and ship.** Make one commit that holds the work and the closed issue:
-   - Write the `## Answer`. It holds one line for each acceptance criterion: the criterion and its proof (the command, the test or the observation, and its result). A criterion with no proof is a gap. List a gap only when the user accepted it in an `AskUserQuestion` answer. A gap with no such answer is a blocker: ask now, before `close-issue`. The Answer says what changed and names the lasting facts in the README, the config, the behavior spec file (for each behavior fact) or a `why:` comment (only for a fact about an external tool that the code cannot show, or about our own design that no test name or doc can hold), as code-format paths (no Markdown link). It holds one line for each new guard: the guard and the failure that it catches. A guard that a criterion names is mandatory. The Answer has a `### Rulings` list as its own subsection: one line for each ruling, with 3 parts: what you decided, why, and the cost if the decision is wrong. With no ruling, write "None." Then run `~/.claude/bin/close-issue NNN`. Do not read the tracker doc for this step.
-   - Call `ship` one time with all changed paths, the issue files included. Include each `edited:` path that `close-issue` prints.
-   - Put every issue file that you created or edited in this session in the same `ship` call.
-
-   Use two commits only when a live check needs the push first (for example a deploy that pulls from git): ship the work, do the live check, then close the issue and ship the close.
-
-   If the live check needs a test commit (a forced failure or a removed resource), ship the revert and the close in one commit.
-
-   The final message is the chat message after the last `ship` call (the one that ships the close). It holds these 5 parts and no other part:
-   1. The result: the issue is closed and shipped, in one line. The line holds the number and the title of the issue. The title is the text of the `# ` line of the issue file. When the push of `ship` failed, the line says that the commit is not pushed.
-   2. The change: 1 or 2 sentences on what is different in daily use for the user. It says what the user now sees, gets, or does not do anymore. It names no file path, no commit hash and no count. It can name a command or a skill that the user types. When the change has no effect in daily use (for example a removal, a refactor or a test), the part says that daily use does not change, and names in one sentence what the change protects or prepares.
-   3. Each thing that needs the user: each accepted gap, each new follow-up issue with its number, and each decision that waits for the user. A new-issue question is not a waiting decision: step 4.7 asks it before `ship`.
-   4. Each ruling with a real cost: one line with what you decided and the cost if the decision is wrong. A ruling has a real cost when a wrong decision changes the result for the user, or when its undo needs work. A ruling with "Cost if wrong: none" has no real cost.
-   5. The next action: the one thing that the user does next, for example "run `/clear` before the next issue".
-
-   Write the final message in this shape:
-
-   ```
-   Issue NNN (<title of the issue>) is closed and shipped.
-   - Changed: <1 or 2 sentences of part 2>
-   - Needs you: <each item of part 3, or "nothing">
-   - Rulings with a real cost: <one line for each, or "none">
-   - Next: <the one next action>
-   ```
-
-   When you are not sure that an item needs the user (part 3) or that a ruling has a real cost (part 4), the item stays in the message. These parts stay out of the final message, and the `## Answer` holds each of them that exists before `ship`: the commit hashes, the state of the push, the list of the tests, the count of the review findings, the counts of the change (files, lines, items), the detail of the change (each changed file and each step of the work, not the `Changed:` line) and each ruling with no real cost. The `## Answer` keeps each ruling with its 3 parts.
-
-   This content list applies only to the final message. A message that stops the session before that `ship` call (a blocker, an escalation, a stop for a different model, an issue that is not clear) keeps its full content.
+   Read `~/.claude/skills/implement/close.md` now and follow it.
