@@ -38,6 +38,8 @@ Too little disclosure bloats the top. Too much hides what the agent needs. **Pro
 
 **Sprawl** is a document that is too long, even if every line is unique. Attention thins. Fix it with disclosure and with splits by branch or sequence.
 
+**Size cap**: a SKILL.md is 16,000 bytes or less (`wc -c`). Why: after compaction, Claude Code re-attaches only the first 5,000 tokens of each skill. Move the material of a rare branch, or of the last step, into a file in the skill folder. Put a pointer line in SKILL.md that names the full installed path (for example `~/.claude/skills/<name>/finish.md`).
+
 ## Steps and completion criteria
 
 Each step ends on a **completion criterion**: the condition that shows the work is done.
