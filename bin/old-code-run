@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# usage: old-code-run PATH... -- CMD [ARG...]
+#   Sets the code PATHs back to HEAD, runs CMD, then puts the edits back, also when CMD fails or stops.
+#   Exit code: the exit code of CMD; 2 for a usage error; 1 when PATHs have no edits; 3 when the edits did not come back.
+set -euo pipefail
+
+paths=()
+while [[ $# -gt 0 && $1 != -- ]]; do paths+=("$1"); shift; done
+[[ ${#paths[@]} -gt 0 && $# -gt 1 ]] || { echo "usage: old-code-run PATH... -- CMD [ARG...]" >&2; exit 2; }
+shift
+
+tag="old-code-run $$ $(date +%s%N)"
+git stash push -q -u -m "$tag" -- "${paths[@]}"
+# why: refs/stash is shared by all worktrees of a repo, so find our own entry by its message and not by its position
+# why: awk reads to the end, because an early exit gives git a SIGPIPE, and pipefail then stops the script before the trap is set
+ref=$(git stash list --format='%H %s' | awk -v t="$tag" 'index($0, t) && !f {print $1; f = 1}')
+[[ -n $ref ]] || { echo "old-code-run: no edits in ${paths[*]}" >&2; exit 1; }
+
+restore() {
+  if ! git stash apply -q "$ref"; then
+    echo "old-code-run: the edits did not come back. They are in stash commit $ref." >&2
+    exit 3
+  fi
+  local slot
+  slot=$(git stash list --format='%gd %H' | awk -v h="$ref" '$2 == h && !f {print $1; f = 1}')
+  [[ -z $slot ]] || git stash drop -q "$slot"
+}
+trap restore EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+set +e
+"$@"
+rc=$?
+set -e
+exit "$rc"
