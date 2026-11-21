@@ -149,7 +149,7 @@ if (( ! issues_only )); then
     if git diff --cached --quiet -- "$@"; then
       echo "ship: no change in the passed paths, push only" >&2
     else
-      git commit -q -F - -- "$@" <<<"$msg"
+      git commit -q -F - -- "$@" <<<"$msg" || { echo "ship: FAILED commit in the code repo, nothing pushed: see the failed hook above" >&2; exit 1; }
     fi
   else
     # why: a path commit reads the work tree, so it would add back a removed file that is present again, and `git add` refuses an ignored path
@@ -166,7 +166,7 @@ if (( ! issues_only )); then
       (( skip )) || addp+=("$p")
     done
     (( ${#addp[@]} == 0 )) || git add -- "${addp[@]}"
-    git commit -q -F - <<<"$msg"
+    git commit -q -F - <<<"$msg" || { echo "ship: FAILED commit in the code repo, nothing pushed: see the failed hook above" >&2; exit 1; }
     unset GIT_INDEX_FILE
     rm -rf "$tmpdir"
     git reset -q -- "$@" 2>/dev/null || true
