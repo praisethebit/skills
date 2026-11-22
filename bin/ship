@@ -15,14 +15,58 @@ set -euo pipefail
 # why: a fixed path under $HOME, so a shell with XDG_RUNTIME_DIR and one without it use the same lock
 lock=${SHIP_LOCK:-$HOME/.cache/ship.lock}
 mkdir -p "$(dirname "$lock")"
-exec 9>>"$lock"
-if ! flock -n 9; then
-  echo "ship: another ship runs, waiting for the lock $lock" >&2
-  flock -w 900 9 || { echo "ship: no lock after 900 s, nothing committed" >&2; exit 1; }
+# mklock <path> <stale s> <wait s> [notice]: take the lock folder <path>.d with mkdir. Returns 1 after the wait limit.
+# why: a folder whose change time is older than the stale limit is stale, and a waiting session removes it and makes it again
+# why: the folder holds the id of its holder, and a session that reads another id after a takeover did not get the lock
+mklock() {
+  local d=$1.d stale=$2 limit=$3 notice=${4:-} id t0=$SECONDS ctime waited=0
+  # why: WSL and Git Bash have separate process numbers on one host name, so the id also holds the OS name
+  id=$(hostname):$(uname -s):$$
+  while :; do
+    if mkdir "$d" 2>/dev/null; then echo "$id" >"$d/holder"; return 0; fi
+    if ctime=$(stat -c %Z "$d" 2>/dev/null) && (( $(date +%s) - ctime > stale )); then
+      rm -rf "$d"
+      if mkdir "$d" 2>/dev/null; then
+        echo "$id" >"$d/holder"
+        sleep 1
+        [[ $(cat "$d/holder" 2>/dev/null) == "$id" ]] && return 0
+      fi
+      continue
+    fi
+    if (( ! waited )) && [[ -n $notice ]]; then echo "$notice" >&2; fi
+    waited=1
+    (( SECONDS - t0 < limit )) || return 1
+    sleep 0.5
+  done
+}
+# mkunlock <path>: free the lock folder <path>.d when this process holds it.
+mkunlock() {
+  if [[ $(cat "$1.d/holder" 2>/dev/null) == "$(hostname):$(uname -s):$$" ]]; then rm -rf "$1.d"; fi
+  return 0
+}
+stale=${SHIP_LOCK_STALE:-900}
+use_flock=1
+# why: Git Bash has no flock, and SHIP_NO_FLOCK=1 forces the mkdir lock in a test
+if [[ ${SHIP_NO_FLOCK:-} == 1 ]] || ! command -v flock >/dev/null 2>&1; then use_flock=0; fi
+mk_held=()
+if (( use_flock )); then
+  exec 9>>"$lock"
+  if ! flock -n 9; then
+    echo "ship: another ship runs, waiting for the lock $lock" >&2
+    flock -w 900 9 || { echo "ship: no lock after 900 s, nothing committed" >&2; exit 1; }
+  fi
+else
+  mklock "$lock" "$stale" 900 "ship: another ship runs, waiting for the lock $lock.d" || { echo "ship: no lock after 900 s, nothing committed" >&2; exit 1; }
+  mk_held+=("$lock")
 fi
 # why: a child process (an ssh master, git gc --auto, a hook daemon) inherits fd 9
 # why: an explicit unlock frees the lock for all holders when ship exits
-trap 'flock -u 9' EXIT
+release_locks() {
+  local p
+  if (( use_flock )); then flock -u 9; fi
+  for p in ${mk_held[@]+"${mk_held[@]}"}; do mkunlock "$p"; done
+}
+trap release_locks EXIT
 # why: the hook blocks a direct `git push` of a tag, so only an explicit --tag makes a tag
 if [[ ${1:-} == --tag ]]; then
   tag=${2:?usage: ship --tag <name>}
@@ -155,7 +199,7 @@ if (( ! issues_only )); then
     # why: a path commit reads the work tree, so it would add back a removed file that is present again, and `git add` refuses an ignored path
     # why: a temporary index holds exactly HEAD plus the paths, and the real index stays as it is until the commit works
     tmpdir=$(mktemp -d)
-    trap 'rm -rf "$tmpdir"; flock -u 9' EXIT
+    trap 'rm -rf "$tmpdir"; release_locks' EXIT
     export GIT_INDEX_FILE=$tmpdir/index
     git read-tree HEAD
     git rm -q --cached --ignore-unmatch -- "${removed[@]}"
@@ -206,6 +250,10 @@ proj_status=
 if [[ -n $proj ]]; then
   # why: in a git worktree the top level is .claude/worktrees/agent-x, and the common git dir is the .git folder of the main checkout
   repo_name=$(basename "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")")
+  # why: a WSL session and a Windows session see the same folder in the common git folder of the issue repo
+  shared=$(git -C "$proj" rev-parse --path-format=absolute --git-common-dir)/ship.lock
+  mklock "$shared" "$stale" 900 "ship: another ship uses the issue repo, waiting for the lock $shared.d" || { echo "ship: no issue repo lock after 900 s, issue files not committed" >&2; exit 1; }
+  mk_held+=("$shared")
   # why: an error in the local step must not stop the ship, so the commits and the pushes still run and the exit code is 1
   extra=
   if [[ -f $local_ship ]]; then
@@ -223,7 +271,10 @@ if [[ -n $proj ]]; then
       proj_status=committed
     fi
   else
-    base=$(realpath --relative-to="$proj" "$(readlink -f "$wf")")
+    # why: in Git Bash readlink prints /tmp/x and git prints C:/Users/x, so a path relation of the two fails, and show-prefix gives the relative path from git alone
+    base=$(git -C "$(readlink -f "$wf")" rev-parse --show-prefix)
+    base=${base%/}
+    [[ -n $base ]] || base=.
     cand=()
     for p in "${scratch[@]}"; do
       r=${p#./}; r=${r#"$wf"}; r=${r#/}
@@ -266,6 +317,7 @@ if [[ -n $proj ]]; then
   else
     echo "ship: FAILED push of the issue repo" >&2; rc=1
   fi
+  mkunlock "$shared"
 fi
 
 # why: a commit that is not on the remote must not reach the live tools

@@ -15,8 +15,32 @@ fi
 state=${NEXT_ISSUE_STATE:-$HOME/.claude/state/next-issue}
 mkdir -p "$state"
 key=$(readlink -f "$dir" | tr / _)
-exec 9>"$state/$key.lock"
-flock 9
+if [[ ${SHIP_NO_FLOCK:-} == 1 ]] || ! command -v flock >/dev/null 2>&1; then
+  # why: Git Bash has no flock, so the lock is the folder $key.lock.d
+  # why: a folder with a change time older than 30 s is stale
+  # why: the folder holds the id of its holder, and a session that reads another id after a takeover did not get the lock
+  d=$state/$key.lock.d
+  id=$(hostname):$(uname -s):$$
+  t0=$SECONDS
+  while :; do
+    if mkdir "$d" 2>/dev/null; then echo "$id" >"$d/holder"; break; fi
+    if ctime=$(stat -c %Z "$d" 2>/dev/null) && (( $(date +%s) - ctime > 30 )); then
+      rm -rf "$d"
+      if mkdir "$d" 2>/dev/null; then
+        echo "$id" >"$d/holder"
+        sleep 1
+        [[ $(cat "$d/holder" 2>/dev/null) == "$id" ]] && break
+      fi
+      continue
+    fi
+    (( SECONDS - t0 < 120 )) || { echo "next-issue: no lock after 120 s" >&2; exit 1; }
+    sleep 0.2
+  done
+  trap '[[ $(cat "$d/holder" 2>/dev/null) == "$id" ]] && rm -rf "$d"' EXIT
+else
+  exec 9>"$state/$key.lock"
+  flock 9
+fi
 max=0
 # why: only a regular file is an issue, so a number in a folder or a broken link does not count
 for i in "$dir"/[0-9]*-*.md "$dir"/done/[0-9]*-*.md; do
