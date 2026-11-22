@@ -22,20 +22,27 @@ txt=$(awk '
   }
   { print }' <<<"$cmd" | perl -0pe "s/(?<![>])(?<!> )(?<!tee )('[^']*'|\"(?:[^\"\\\\]|\\\\.)*\")/''/g")
 # why: a session sets S=<scratchpad> and writes to $S/x, so a variable set to a temp path is a temp path.
-tmpvars=$(grep -oE '(^|[;&|[:space:]])[A-Za-z_][A-Za-z_0-9]*=["'"'"']?(/tmp/|\$TMPDIR|\$\{TMPDIR|\$\(mktemp|/mnt/[a-z]/Users/[^/]+/AppData/Local/Temp/)' <<<"$cmd" | sed -E 's/^[;&|[:space:]]*//; s/=.*//')
+tmpvars=$(grep -oE '(^|[;&|[:space:]])[A-Za-z_][A-Za-z_0-9]*=["'"'"']?(/tmp/|\$TMPDIR|\$\{TMPDIR|\$\(mktemp|((/mnt)?/[A-Za-z]|[A-Za-z]:)[/\\]+[Uu]sers[/\\]+[^/\\ ]+[/\\]+[Aa]pp[Dd]ata[/\\]+[Ll]ocal[/\\]+[Tt]emp[/\\])' <<<"$cmd" | sed -E 's/^[;&|[:space:]]*//; s/=.*//')
 # why: a relative write after `cd <temp dir>` is a temp write only when that cd is the one cd of the command.
 cds=$(grep -oE '(^|[;&|(])[[:space:]]*cd[[:space:]]+[^;&|[:space:]]+' <<<"$txt" | sed -E 's/^.*cd[[:space:]]+//; s/["'"'"']//g')
 tmpcwd=0
+# why: Windows paths come in 4 forms (/mnt/c, /c, C:/, C:\), so one regex matches them all.
+# why: the drive letter and AppData\Local\Temp can have any case, so the match runs on the lower-case path.
+# why: a Python string holds a backslash as \\, so one or more separators match
+wintmp_re='^((/mnt)?/[a-z]|[a-z]:)[/\\]+users[/\\]+[^/\\ ]+[/\\]+appdata[/\\]+local[/\\]+temp[/\\]'
+is_win_tmp() { local l=${1,,}; [[ $l =~ $wintmp_re ]]; }
 if [[ -n $cds && $(grep -c . <<<"$cds") -eq 1 ]]; then
   [[ $cds =~ ^(/tmp/|\$TMPDIR|\$\{TMPDIR) ]] && tmpcwd=1
+  is_win_tmp "$cds" && tmpcwd=1
   for v in $tmpvars; do [[ $cds == "\$$v" || $cds == "\$$v/"* || $cds == "\${$v}"* ]] && tmpcwd=1; done
 fi
 # Return 0 when the write target $1 is a temp path: /tmp, /dev, TMPDIR, Windows Temp, a temp variable, or a relative path after a cd to /tmp.
 is_tmp() {
   local t=${1//[\"\']/} v
-  [[ $t == /tmp/* || $t == /dev/* || $t == '$TMPDIR'* || $t == '${TMPDIR'* || $t =~ ^/mnt/[a-z]/Users/[^/]+/AppData/Local/Temp/ ]] && return 0
+  [[ $t == /tmp/* || $t == /dev/* || $t == '$TMPDIR'* || $t == '${TMPDIR'* ]] && return 0
+  is_win_tmp "$t" && return 0
   for v in $tmpvars; do [[ $t == "\$$v/"* || $t == "\${$v}/"* ]] && return 0; done
-  [[ $tmpcwd == 1 && $t != /* && $t != '~'* && $t != '$'* ]] && return 0
+  [[ $tmpcwd == 1 && $t != /* && $t != '~'* && $t != '$'* && ! $t =~ ^[A-Za-z]:[/\\] ]] && return 0
   return 1
 }
 # why: the first word that is not an option is the sed or perl program, unless an -e or -f option gives it.
@@ -59,7 +66,7 @@ done < <(grep -oE '(^|[;&|(]|\s)(sed|perl)\s+(-[a-zA-Z]*i|--in-place)[^;&|)]*' <
 if grep -qE "open\([^)]*,\s*['\"][wa]|\.write_text\(" <<<"$cmd"; then
   while IFS= read -r a; do
     a=$(sed -E 's/^\s+|\s+$//g' <<<"$a")
-    if [[ $a =~ ^[\"\'](.*)[\"\']$ ]]; then
+    if [[ $a =~ ^[rR]?[\"\'](.*)[\"\']$ ]]; then
       val=${BASH_REMATCH[1]}
     elif [[ $a =~ ^[A-Za-z_][A-Za-z_0-9]*$ ]]; then
       val=$(grep -oE "(^|[^A-Za-z_0-9.])$a\s*=\s*[\"'][^\"']+[\"']" <<<"$cmd" | tail -1 | sed -E "s/^.*=\s*[\"']//; s/[\"']$//")

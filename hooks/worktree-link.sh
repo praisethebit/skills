@@ -6,6 +6,8 @@ set -uo pipefail
 input=$(cat 2>/dev/null || true)
 dir=$(jq -r '.cwd // empty' <<<"$input" 2>/dev/null || true)
 [[ -n $dir ]] || dir=$PWD
+# why: on Windows the hook input has cwd as C:\..., and cygpath (in Git Bash) makes the form that the shell commands use
+if command -v cygpath >/dev/null 2>&1; then dir=$(cygpath -u "$dir" 2>/dev/null || printf '%s' "$dir"); fi
 top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null) || exit 0
 gitdir=$(git -C "$top" rev-parse --absolute-git-dir 2>/dev/null) || exit 0
 common=$(git -C "$top" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
@@ -28,7 +30,8 @@ if [[ ! -e $top/$wf && ! -L $top/$wf ]]; then
   target=$(readlink "$main/$wf") || exit 0
   [[ $target == /* ]] || target=$(readlink -f "$main/$wf") || exit 0
   mkdir -p "$(dirname "$top/$wf")" 2>/dev/null || true
-  ln -s "$target" "$top/$wf" 2>/dev/null || true
+  # why: in Git Bash, ln -s makes a copy unless MSYS has winsymlinks:nativestrict, and the session environment may not have it
+  MSYS=winsymlinks:nativestrict ln -s "$target" "$top/$wf" 2>/dev/null || true
 fi
 [[ -L $top/$wf ]] || exit 0
 real=$(readlink -f "$top/$wf") || exit 0
