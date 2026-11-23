@@ -126,4 +126,4 @@ Save the time only when the argument is empty. Why: a run of a past day would mo
 
 ## Step 8: Apply
 
-Ask the user which changes to apply (`AskUserQuestion` with `multiSelect: true`). The tool allows 4 options in a question: split the numbered changes, including the recommended candidates, into questions of 4 options. Apply only the selected ones. Validate each edit (for example `jq empty` on JSON). Commit the repo files with `ship`. A file outside a git repo stays on disk only: tell the user which ones. Done when each selected change is applied and validated.
+Ask the user which changes to apply (`AskUserQuestion` with `multiSelect: true`). The tool allows 4 options in a question: split the numbered changes, including the recommended candidates, into questions of 4 options. Apply only the selected ones. Validate each edit (for example `jq empty` on JSON). Commit the repo files with `commit-push`. A file outside a git repo stays on disk only: tell the user which ones. Done when each selected change is applied and validated.

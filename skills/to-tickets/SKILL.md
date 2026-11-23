@@ -75,7 +75,7 @@ Write one file per approved ticket in the issue folder, at `<work folder>/issues
 
 ### 5a. Cold read
 
-Do this before `ship`. Give the reader the absolute path of the ticket file. Read `~/.claude/skills/to-tickets/cold-read-ticket.md` and follow it.
+Do this before `commit-push`. Give the reader the absolute path of the ticket file. Read `~/.claude/skills/to-tickets/cold-read-ticket.md` and follow it.
 
 1. Start one reader for each ticket in one message.
 2. Show the user each paraphrase.
@@ -89,7 +89,7 @@ Done when each ticket has a paraphrase (or a failed reader has an accepted gap, 
 
 Name the **frontier** in the final message: each ticket whose blockers are all done. `/implement` starts those tickets in later sessions.
 
-If the source is an issue, close it after you publish the tickets. Do not close it while a picked failure mode is in no ticket: add the pick to a ticket first, and show the user that ticket. Append an `## Answer` section that lists the new tickets, then run `~/.claude/bin/close-issue NNN`. Then ship the new files and the closed issue with `ship --issues` and the `<work folder>/...` path of each file. Include each `edited:` path that `close-issue` prints.
+If the source is an issue, close it after you publish the tickets. Do not close it while a picked failure mode is in no ticket: add the pick to a ticket first, and show the user that ticket. Append an `## Answer` section that lists the new tickets, then run `~/.claude/bin/close-issue NNN`. Then ship the new files and the closed issue: call `commit-push` with the `--issues` form and the `<work folder>/...` path of each file. Include each `edited:` path that `close-issue` prints.
 
 <local-ticket-template>
 

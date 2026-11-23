@@ -7,7 +7,7 @@ argument-hint: "[folder or package]"
 
 ## Opus guard
 
-Do this check first, and again at the start of each turn until the skill ends. The skill ends after the `ship` call of the log, or when it writes no log (the user selects `stop`, or the work folder of the repo does not exist), or when the user picks no finding. Your system prompt names your model. If the model is not Opus and not Fable, stop. Do not do the next step. Tell the user: "This skill needs Opus or Fable. Press `s` in `/model`, pick Opus (the default) or Fable, then send your last message again."
+Do this check first, and again at the start of each turn until the skill ends. The skill ends after the `commit-push` call of the log, or when it writes no log (the user selects `stop`, or the work folder of the repo does not exist), or when the user picks no finding. Your system prompt names your model. If the model is not Opus and not Fable, stop. Do not do the next step. Tell the user: "This skill needs Opus or Fable. Press `s` in `/model`, pick Opus (the default) or Fable, then send your last message again."
 
 Why: a `model:` key in a skill lasts for one turn only. Each reply of the user then goes back to the session model.
 

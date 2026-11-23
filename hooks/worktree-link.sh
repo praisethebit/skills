@@ -37,5 +37,5 @@ fi
 real=$(readlink -f "$top/$wf") || exit 0
 # why: the worktree guard refuses an Edit or a Write through the work folder link, and a Bash command that it cannot prove stays in the worktree
 # shellcheck disable=SC2016
-printf 'Worktree session. Read and edit the issue files at %s, not through %s: the worktree guard refuses an Edit or a Write through the link. Still give ship the %s/... paths. Write one plain command in each Bash call: the guard refuses a loop, a $variable in a sed, ssh or git argument, and a heredoc whose text has the word git. Edit a file with the Edit tool, not with a python or sed script.\n' "$real" "$wf" "$wf"
+printf 'Worktree session. Read and edit the issue files at %s, not through %s: the worktree guard refuses an Edit or a Write through the link. Still give commit-push the %s/... paths. Write one plain command in each Bash call: the guard refuses a loop, a $variable in a sed, ssh or git argument, and a heredoc whose text has the word git. Edit a file with the Edit tool, not with a python or sed script.\n' "$real" "$wf" "$wf"
 exit 0

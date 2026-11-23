@@ -53,7 +53,7 @@ I usually plan on Opus and implement on Sonnet. Each issue file names the `model
 **Model-invoked**
 
 - **[add-issue](./skills/add-issue/SKILL.md)**: Makes one issue file from a short request. It takes the next free number, sets the `stage`, the `model` and the `effort`, and ships the file. A clear, small issue goes directly to `next`. "add idea: X" makes an idea with a title and one line of text.
-- **[ship](./skills/ship/SKILL.md)**: Makes each commit and each push, through the script `bin/ship`. The script commits only the paths that the session passes, and then it pushes. A hook blocks a direct `git commit` and `git push`.
+- **[commit-push](./skills/commit-push/SKILL.md)**: Makes each commit and each push, through the script `bin/ship`. The script commits only the paths that the session passes, and then it pushes. A hook blocks a direct `git commit` and `git push`.
 
 ## The parts behind the workflow
 
@@ -131,7 +131,7 @@ The second hook is strict. Leave it out if you want Claude to write files from t
 
 ### Local extensions
 
-`ship`, `implement`, `research`, `workflow-review` and the tracker doc read `~/.claude/local/<name>.md` when the file exists, and follow its steps. `ship` also runs `~/.claude/local/ship.sh`. My private steps are there, and this repo does not hold them. Put your own steps in the same place.
+`commit-push`, `implement`, `research`, `workflow-review` and the tracker doc read `~/.claude/local/<name>.md` when the file exists, and follow its steps. The script `ship` also runs `~/.claude/local/ship.sh`. My private steps are there, and this repo does not hold them. Put your own steps in the same place.
 
 ## Credits
 

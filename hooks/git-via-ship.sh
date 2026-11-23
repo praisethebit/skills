@@ -33,7 +33,7 @@ while IFS= read -r part; do
   }; then
     continue
   fi
-  echo "Use the ship skill to commit or push. Pass it the changed paths, a summary and the message convention. For a test repo in the session scratchpad, use git -C <literal scratchpad path> commit." >&2
+  echo "Use the commit-push skill to commit or push. Pass it the changed paths, a summary and the message convention. For a test repo in the session scratchpad, use git -C <literal scratchpad path> commit." >&2
   exit 2
 done < <(sed -E 's/(&&|\|\||[;&|])/\n/g' <<<"$cmd")
 exit 0

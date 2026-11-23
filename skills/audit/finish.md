@@ -45,8 +45,8 @@ Done when each item in the report is in the log.
 4. Write each `#NNN` in the log. Decide it for each group by itself: the `#NNN` of a group is the number of the issue that got the group.
    - `add-issue` made a new issue (it printed no `edited:` line): use the new number from `--claim`. This includes the user answer "New issue" in the match question.
    - `add-issue` appended the group to an open issue (it printed `edited: <work folder>/issues/<file name>`): use the digits before the first `-` of the file name, as written. Example: `042-some-title.md` gives `#042`. The number from `--claim` stays unused.
-5. Ship the log as the last step: with `ship --issues` when the work folder is a symlink, with `ship` if not. `ship` commits only the `<work folder>/...` paths that it gets.
+5. Ship the log as the last step: call `commit-push` with the `--issues` form when the work folder is a symlink, and with the plain form if not. `commit-push` commits only the `<work folder>/...` paths that it gets.
 
-Done when the `ship` call of the log has run.
+Done when the `commit-push` call of the log has run.
 
 Do not change code. The skill writes only the log, the probe files in the scratchpad, and the issues through `add-issue`.

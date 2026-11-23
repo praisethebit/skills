@@ -10,7 +10,7 @@ The work folder of a repo holds its issues, specs, research and audit logs. The 
    1a. Size of a ticket: a maximum of 6 acceptance criteria, and work in one seam. Added findings (`add-issue`) can take a ticket to a maximum of 10 criteria. Use approximately 800 changed lines as a guide. The fixed checks that a repo copies into each ticket do not count. When a feature needs fixed checks (for example a UI review), put them in one "Finish" ticket at the end of the feature, not in each ticket. A feature has a maximum of 4 tickets before its Finish ticket. A Finish ticket fixes a maximum of 6 findings, high severity first. Each other finding becomes a new ticket. The Finish ticket closes when each high-severity finding is fixed or has a ticket.
 2. `/clear`. The default model is Sonnet.
 3. Implement one issue per session: `/implement NNN`. The skill implements, reviews, closes and ships the issue. Then `/clear` before the next issue.
-   3a. To implement 2 or more issues of one repo at the same time, start each extra session in its own worktree: `claude -w <NNN>`. Two sessions in one checkout can lose edits, because the `pre-commit` hook stashes all unstaged edits during a commit. `ship` pushes the worktree commit to `main`. After the session, run `git pull` in the main checkout. In a worktree session, write each path as a literal absolute path. Do not start a Bash call with `cd`, and do not use `git -C`, `env -C`, `bash -c`, a `$` expansion (`$(...)`, `$?`, `${...}`, `$VAR`), a shell function, a heredoc or `git` in a loop. For a sequence of commands, write a script file with `Write` in the scratchpad and run `bash <absolute path>`. Why: Claude Code refuses these calls in a worktree, and each refusal costs one more turn.
+   3a. To implement 2 or more issues of one repo at the same time, start each extra session in its own worktree: `claude -w <NNN>`. Two sessions in one checkout can lose edits, because the `pre-commit` hook stashes all unstaged edits during a commit. `commit-push` pushes the worktree commit to `main`. After the session, run `git pull` in the main checkout. In a worktree session, write each path as a literal absolute path. Do not start a Bash call with `cd`, and do not use `git -C`, `env -C`, `bash -c`, a `$` expansion (`$(...)`, `$?`, `${...}`, `$VAR`), a shell function, a heredoc or `git` in a loop. For a sequence of commands, write a script file with `Write` in the scratchpad and run `bash <absolute path>`. Why: Claude Code refuses these calls in a worktree, and each refusal costs one more turn.
 4. Run `/workflow-review` one time at the end of an epic (all tickets from one `/to-tickets`). The review proposes a change only for a gap that happened in two or more sessions, or for one failure that proves a rule is missing (for example a breach of a protective rule).
 
 ## Blockers
@@ -58,12 +58,12 @@ These rules apply to each code review (`/code-review`). Zero findings is a corre
 
 ## Git
 
-- To commit or push, use the `ship` skill. Do not run `git commit` or `git push` yourself. A hook blocks them in the main session.
-- Pass `ship` the paths you changed, a one-line summary, and the repo's message convention.
-- When a change that the user asked for is done and its checks pass, call `ship`. Do not ask first. Ask only before you ship a file that the user did not ask to change.
+- To commit or push, use the `commit-push` skill. Do not run `git commit` or `git push` yourself. A hook blocks them in the main session.
+- Pass `commit-push` the paths you changed, a one-line summary, and the repo's message convention.
+- When a change that the user asked for is done and its checks pass, call `commit-push`. Do not ask first. Ask only before you ship a file that the user did not ask to change.
 - Do not add a `Co-Authored-By` line or other AI attribution to commits or PRs. The README states the AI use.
 - The shell is zsh with `nonomatch`: an unmatched glob goes to the command as text. Quote a word that starts with `=`, or zsh stops with `= not found`.
 - To wait for a long command, start it with `run_in_background`. To wait for a background command or agent, end the turn: the harness sends a notification. Do not call `sleep`. `pkill -f` and `pgrep -f` match their own shell.
 - A commit subject names the change. It has no issue number: on a public repo, `#106` links to an unrelated GitHub issue, or to nothing.
-- In a repo whose work folder is a symlink into another git repo, one `ship` call also commits and pushes the `<work folder>/...` paths that you pass, in that repo. For a change with no code paths, use `ship --issues` with the `<work folder>/...` paths.
+- In a repo whose work folder is a symlink into another git repo, one `commit-push` call also commits and pushes the `<work folder>/...` paths that you pass, in that repo. For a change with no code paths, call `commit-push` with the `--issues` form and the `<work folder>/...` paths.
 - Default for a solo repo: one commit for each resolved issue, push to `main`, no PRs. A repo can override this.

@@ -1,5 +1,5 @@
 ---
-name: ship
+name: commit-push
 description: Commit and push changes. Use every time you commit or push in any repo. Pass the changed paths, a one-line summary, and the commit message convention.
 ---
 
@@ -16,9 +16,9 @@ $ARGUMENTS
 3. If a pre-commit hook fails, fix the cause and run the script again. Never use `--no-verify`, `--force` or `git reset --hard`.
 4. Tell the user the hash and subject. Tell the user about each file that the script lists as `not staged`.
 5. The script exits 1 if a push fails. It prints `FAILED push of the code repo` or `FAILED push of the issue repo`. Tell the user which repo failed. A failed push in one repo does not undo the other.
-6. If the script prints `pull --rebase failed`, fix the conflict with `git rebase`, then run the same `ship` call again. With no new change in the paths, it only pushes.
+6. If the script prints `pull --rebase failed`, fix the conflict with `git rebase`, then run the same script call again. With no new change in the paths, it only pushes.
 
-Local extension: read `~/.claude/local/ship.md` when it exists, and follow its steps.
+Local extension: read `~/.claude/local/commit-push.md` when it exists, and follow its steps.
 
 A repo whose work folder is a symlink into another git repo (the issue repo) keeps its issues there. Pass each issue file that you changed as a `<work folder>/...` path. The same call commits only those issue files in the issue repo, with the code repo name and hash in the body, and pushes both. All sessions share the issue repo, so the script does not commit the other changes there. For a file in `<work folder>/issues/done/`, it also commits the removal of the old path in `<work folder>/issues/`.
 
