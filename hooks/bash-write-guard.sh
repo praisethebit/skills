@@ -9,7 +9,7 @@ input=$(cat 2>/dev/null || true)
 cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 [[ -n $cmd ]] || exit 0
 deny() {
-  echo "Change a repo file with the Edit or Write tool, not with $1 in Bash. Why: the harness file-state check sees only Edit and Write. A write to a path under /tmp passes." >&2
+  echo "Change a repo file with the Edit or Write tool, not with $1 in Bash. Why: the harness file-state check sees only Edit and Write. A write to a literal path under /tmp or /dev/shm passes." >&2
   exit 2
 }
 # why: a heredoc body and a quoted string are text, not a program, so a commit message or a Markdown quote passes the sed and redirect checks
@@ -32,7 +32,7 @@ tmpcwd=0
 wintmp_re='^((/mnt)?/[a-z]|[a-z]:)[/\\]+users[/\\]+[^/\\ ]+[/\\]+appdata[/\\]+local[/\\]+temp[/\\]'
 is_win_tmp() { local l=${1,,}; [[ $l =~ $wintmp_re ]]; }
 if [[ -n $cds && $(grep -c . <<<"$cds") -eq 1 ]]; then
-  [[ $cds =~ ^(/tmp/|\$TMPDIR|\$\{TMPDIR) ]] && tmpcwd=1
+  [[ $cds =~ ^(/tmp/|/dev/shm/|\$TMPDIR|\$\{TMPDIR) ]] && tmpcwd=1
   is_win_tmp "$cds" && tmpcwd=1
   for v in $tmpvars; do [[ $cds == "\$$v" || $cds == "\$$v/"* || $cds == "\${$v}"* ]] && tmpcwd=1; done
 fi
