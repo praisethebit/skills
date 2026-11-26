@@ -11,7 +11,7 @@ Local extension: read `~/.claude/local/implement.md` when it exists, and follow 
 
 With 2 or more issue numbers, do not implement an issue. Follow the local extension for many issues. With no local extension, tell the user to start one session for each issue, each in its own worktree (`claude -w <NNN>`), and stop. When the user later asks for the state, look in `<work folder>/issues/done/` first: `close-issue` moves a closed issue there.
 
-With one number, implement issue $ARGUMENTS. Each step ends on its completion criterion.
+With one number, first do the one-number step of the local extension, when it has one. Then implement issue $ARGUMENTS. Each step ends on its completion criterion.
 
 Each `AskUserQuestion` call of this skill (a blocker, the recommended issues of step 4.7, a gap) holds 3 parts: the decision, what each option changes for the user, and the recommended option. The question text starts at the decision. It does not tell how the session got to the question. A question for a blocker also keeps the blocked requirement, the exact command or error, what you tried, and each step that the user must do, as the Blockers rule in `~/.claude/workflow.md` asks.
 
