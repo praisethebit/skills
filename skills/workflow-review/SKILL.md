@@ -31,12 +31,12 @@ Ask the scope first (step 1). Then set the window from `$ARGUMENTS`:
 
 | Argument | Window |
 |---|---|
-| empty | from the saved time of the scope until now. With no saved time: today, from local midnight |
+| empty | from the saved time of the scope until now. With no saved time: all sessions |
 | `Nh` (for example `6h`) | the last N hours |
 | `Nd` (for example `3d`) | the last N days |
 | `YYYY-MM-DD` | that day, local midnight to midnight |
 
-State the window, in local time and in UTC, before step 2.
+State the window, in local time and in UTC, before step 2. With no saved time, state `all sessions (no saved time for <scope key>)`, with no time.
 
 ### Saved time
 
@@ -45,18 +45,18 @@ The file `~/.claude/state/workflow-review-last` is a runtime file. Each line is 
 With an empty argument:
 
 - One scope key: the window starts at the saved time of the key.
-- Chosen projects: the window starts at the earliest saved time of the chosen repos. A repo with no saved time counts as local midnight today.
-- A key with no saved time: use today, from local midnight.
+- Chosen projects: the window starts at the earliest saved time of the chosen repos. A repo with no saved time counts as `1970-01-01T00:00:00Z`, so the window covers all sessions.
+- A key with no saved time means "never reviewed": the window covers all sessions, from `1970-01-01T00:00:00Z`.
 
 Before step 2, run `date -u +%Y-%m-%dT%H:%M:%SZ` one time. Keep the output as `RUN_START`: the time that the run starts. It is not the start of the window. Do not run `date` again for the save.
 
 Pass the window to the collector in one of these ways:
 
 - Empty argument with a saved time: `--since "<saved UTC time>"`. Do not use `--window` with it. Do not round the time to `Nh` or `Nd`.
-- Empty argument with no saved time: `--window ""`.
+- Empty argument with no saved time: `--since 1970-01-01T00:00:00Z`.
 - Explicit argument: `--window "$ARGUMENTS"`.
 
-Create the run folder with `mktemp -d "${TMPDIR:-/tmp}/workflow-review-XXXXXXXX"`. Keep its absolute path as `REPORT_DIR`. Write no file in the user repo.
+Create the run folder with `mktemp -d "${TMPDIR:-/tmp}/workflow-review-XXXXXXXX"`. Keep its absolute path as `REPORT_DIR`. Write no file in the user repo, except the report file and the `.git/info/exclude` line of step 7.
 
 ## Step 2: Collect
 
@@ -112,7 +112,14 @@ Read `$SKILL_ROOT/references/workflow-improvements.md` and follow it. A change c
 
 ## Step 7: Report
 
-Write `$REPORT_DIR/report.md` with these 5 sections, in this order:
+Set `REPORT_FILE`. The transcripts and `inventory.json` stay in `REPORT_DIR`.
+
+1. Run `git -C <working folder> rev-parse --path-format=absolute --git-common-dir`. Keep the output as `GIT_DIR`. Its parent folder is the main checkout (also when the session runs in a worktree).
+2. If the command fails, or `<main checkout>/.git` is not `GIT_DIR` (a bare repo or a submodule), set `REPORT_FILE` to `$REPORT_DIR/report.md`.
+3. Otherwise set `REPORT_FILE` to `<main checkout>/.workflow-review/<YYYY-MM-DD-HHMM>.md`. Get the name with `date -d "<RUN_START value>" +%Y-%m-%d-%H%M` (local time): write the literal `RUN_START` value, because an unset variable gives midnight. Run `mkdir -p` on the folder. A second run in the same minute overwrites the file.
+4. Run `mkdir -p "$GIT_DIR/info"`. Add the line `.workflow-review/` to `$GIT_DIR/info/exclude` (write the literal path), only when the file has no such line (check with `grep -qxF`). Change no tracked file.
+
+Write `REPORT_FILE` with these 5 sections, in this order:
 
 1. **Grade**: the 7 scores and `overall`.
 2. **Top findings**: the 3 patterns from step 4.
@@ -120,9 +127,9 @@ Write `$REPORT_DIR/report.md` with these 5 sections, in this order:
 4. **New tooling**: the candidates from step 5, each with the count, the example, the type and the "no duplicate" check.
 5. **Do not change**: each finding or candidate that gets no change, with the reason.
 
-Write no HTML page, no PNG and no link. Give the grade and the top findings in chat, with the path of `report.md`. Done when `report.md` exists and has the 5 sections.
+Write no HTML page, no PNG and no link. Give the grade and the top findings in chat, with the absolute path of `REPORT_FILE`. Done when `REPORT_FILE` exists and has the 5 sections.
 
-Save the time only when the argument is empty. Why: a run of a past day would move the saved time to now and hide the sessions between. Do it after `report.md` exists. For each scope key of the run, replace its line in `~/.claude/state/workflow-review-last` (or add it) with `<scope key><TAB><RUN_START>`. Save `RUN_START` (the start time of the run), not the end time. Create the folder `~/.claude/state` if it is missing. An explicit argument saves no time.
+Save the time only when the argument is empty. Why: a run of a past day would move the saved time to now and hide the sessions between. Do it after `REPORT_FILE` exists. For each scope key of the run, replace its line in `~/.claude/state/workflow-review-last` (or add it) with `<scope key><TAB><RUN_START>`. Save `RUN_START` (the start time of the run), not the end time. Create the folder `~/.claude/state` if it is missing. An explicit argument saves no time.
 
 ## Step 8: Apply
 
