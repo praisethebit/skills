@@ -16,7 +16,7 @@ The work folder of a repo holds its issues, specs, research and audit logs. The 
 ## Blockers
 
 - A blocker is anything that stops you from doing or testing a requirement: no connection, a missing tool, no access, a timeout after the one retry of the Long commands rule, an unclear result.
-- When you hit a blocker, stop that requirement. State the requirement, the exact command or error, and what you tried. Then ask the user with `AskUserQuestion`. The options are: the user removes the blocker, the user gives another way, or the user accepts the gap. The user sees only the dialog: put each command and each step that the user must do in the question text, not only in the chat, a preview or a file.
+- When you hit a blocker, stop that requirement. State the requirement, the exact command or error, and what you tried. Then ask the user with `AskUserQuestion`. The options are: the user removes the blocker, the user gives another way, or the user accepts the gap. The user sees only the dialog: put each step that the user must do in the question text. When a step is a command that the user runs, do not open the dialog. Write the command in a fenced code block in the chat, say what to paste back, and end the turn. Why: the user cannot copy text from the dialog.
 - Do not skip, simulate, or silently drop a requirement. Do not close an issue with a requirement that you did not meet and prove. List each accepted gap in the `## Answer`.
 - The user has admin on all machines. Do not assume a setting, service, or permission is locked, off, or impossible. Ask the user to enable, disable, or grant it.
 
